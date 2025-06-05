@@ -1,0 +1,40 @@
+# STM32 SAI driver configuration options
+
+# Copyright (c) 2018 STMicroelectronics
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig SAI_STM32
+	bool "STM32 MCU SAI controller driver"
+	default y
+	# depends on DT_HAS_ST_STM32_SAI_ENABLED
+	select CACHE_MANAGEMENT if CPU_HAS_DCACHE
+	select DMA
+	select PINCTRL
+	# select SOC_SERIES_STM32F7X
+	help
+		Enable SAI support on the STM32F7 & STM32H7 family of processors.
+		(Tested on STM32F7_Disco Board)
+
+if SAI_STM32
+
+config STM32_SAI_HAS_MCLK_CONFIG_OPTION
+	bool "Set if SAI has MCLK configuration options"
+	default n
+	help
+		Select this if the SAI IP allows configuration
+		of the master clock. Master clock configuration
+		refers to enabling/disabling the master clock,
+		setting the signal as input or output or dividing
+		the master clock output.
+
+# config
+
+config SAI_STM32_RX_BLOCK_COUNT
+	int "RX queue length"
+	default 4
+
+config SAI_STM32_TX_BLOCK_COUNT
+	int "TX queue length"
+	default 4
+
+endif # SAI_STM32

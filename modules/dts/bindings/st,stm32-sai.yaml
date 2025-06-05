@@ -1,0 +1,5 @@
+description: STM32 I2S controller
+
+compatible: "st,stm32-i2s"
+
+include: st,stm32-i2s-common.yaml

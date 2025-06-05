@@ -1,0 +1,30 @@
+// Design Note
+Note:
+    - Implementation is based on Free protocol modes described in: https://www.st.com/resource/en/product_training/STM32F7_Peripheral_SAI.pdf
+    - The STM32F7 has two SAI with FIFO buffer of 8 (x 32-bits) Samples each, with two interrups
+      and DMA Interfaces.
+
+        Implementation Knowledge Guide
+---------------------------------------------------
+* SAI SCK can be generated from:
+    - The two PLL
+    - I2S_CKIN pad
+    - HSI or HSE (only on STM32H7)
+
+* The Free protocol mode is configurable in:
+    - I2S Philips Standard
+    - I2S MSB-justified
+    - LSB-justified
+    - TDM
+    - PDM
+
+* Free protocol is used to adjust:
+    - Data Justification
+    - Data size, slot (or channel) size
+    - Data position into slot
+    - Sampling edge of the serial (sample at rising or falling edge of clock)
+    - Frame size, Frame polarity, Frame period
+    - Frame active level size
+    - Frame Synchronization mode
+    - Master / Slave mode
+    - Single or Multiple or Full-duplex data lanes

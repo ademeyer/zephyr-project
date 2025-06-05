@@ -1,0 +1,6 @@
+name: stm32f746_disco_sai
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+   dts_root: .
