@@ -1,5 +1,24 @@
-description: STM32 I2S controller
+# Copyright (c) 2025 Author. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
-compatible: "st,stm32-i2s"
+description: |
+STM32 I2S controller
 
-include: st,stm32-i2s-common.yaml
+It is present on stm32 devices such as STM32F7xxx and STM32F7xxx
+
+compatible: "st,stm32-sai"
+
+include: st,stm32-i2s.yaml
+
+properties:
+  block:
+    type: int 
+    description: |
+      Indicate the block register of the SAI  
+      Availble:
+        - BLOCKA  
+        - BLOCKB  
+
+    enum:
+      - BLOCKA
+      - BLOCKB

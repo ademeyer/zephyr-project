@@ -1,4 +1,36 @@
 /{
 
-  
+  sai2: sai@40015C00 {
+      compatible = "st,stm32-sai";
+      #address-cells = <1>;
+      #size-cells = <0>;
+      reg = <0x40015C00 0x400>;
+      clocks = <&rcc STM32_CLOCK(APB2, 28U)>;
+      interrupts = <38 0>;
+      dmas = <&dma2 1 4 STM32_DMA_MEM_INC STM32_DMA_FIFO_FULL
+              &dma2 0 4 STM32_DMA_MEM_INC STM32_DMA_FIFO_FULL>;
+      dma-names = "tx", "rx";
+      mck-enabled;
+      pinctrl-0 = < &sai2_mclk_a_pi4 
+                    &sai2_sck_a_pi5
+                    &sai2_sd_a_pi6
+                    &sai2_fs_a_pi7 
+                    &sai2_sd_b_pg10 /* optional for both direction (tx & rx)*/
+                  >;
+      pinctrl-names = "default";
+      status = "okay";
+  };
+
+};
+
+&dma2 {
+  status = "okay";
+};
+
+&i2c3 {
+    audio_codec: wm8962@34 {
+      compatible = "wolfson,wm8962";
+      reg = <0x34>;
+      clock-source = "MCLK";
+    };
 };

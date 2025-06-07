@@ -3,6 +3,7 @@
 #include <zephyr/drivers/i2s.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/logging/log.h>
+#include "stm32_ll_sai.h"
 
 LOG_MODULE_REGISTER(audio_capture, LOG_LEVEL_DGB);
 

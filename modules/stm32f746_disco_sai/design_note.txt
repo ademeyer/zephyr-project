@@ -28,3 +28,14 @@ Note:
     - Frame Synchronization mode
     - Master / Slave mode
     - Single or Multiple or Full-duplex data lanes
+
+
+/* SAI dt-binging field */
+* reg
+* clock
+* clock-names
+* block
+* mck_enable
+* dma
+* pinctrl
+* 
