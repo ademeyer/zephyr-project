@@ -6,7 +6,9 @@
       #size-cells = <0>;
       reg = <0x40015C00 0x400>;
       clocks = <&rcc STM32_CLOCK(APB2, 28U)>;
-      interrupts = <38 0>;
+      clock-names = "mclk";
+      interrupts = <91 0>;
+      interrupt-parent = <&nvic>;
       dmas = <&dma2 1 4 STM32_DMA_MEM_INC STM32_DMA_FIFO_FULL
               &dma2 0 4 STM32_DMA_MEM_INC STM32_DMA_FIFO_FULL>;
       dma-names = "tx", "rx";
@@ -20,6 +22,10 @@
       pinctrl-names = "default";
       status = "okay";
   };
+
+  aliases {
+		i2s-codec-tx = &sai2;
+	};
 
 };
 

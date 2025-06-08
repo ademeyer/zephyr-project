@@ -7,7 +7,6 @@ if(CONFIG_SAI_STM32)
   zephyr_include_directories(.)
 
   # Add source file to build
-  # zephyr_library_sources(i2s_common.c)
   zephyr_library_sources(stm32_ll_sai.c)
   zephyr_library_sources(i2s_sai_ll_stm32.c)
 endif()

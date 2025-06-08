@@ -7,7 +7,7 @@
  * @{
  */
 #define SAI_DEFAULT_TIMEOUT 4U /* 4ms */
-#define SAI_LONG_TIMEOUT    1000U
+#define SAI_LONG_TIMEOUT 1000U
 /**
  * @}
  */
@@ -21,13 +21,13 @@
  */
 int LL_sai_init(sai_cfg_t *sai_cfg);
 static int LL_sai_init_i2s(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datasize,
-			   uint32_t nbslot);
+                           uint32_t nbslot);
 static int LL_sai_init_pcm(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datasize,
-			   uint32_t nbslot);
+                           uint32_t nbslot);
 static SAI_Block_TypeDef *LL_get_sai_block(SAI_TypeDef *SAIx, uint32_t block);
 static void LL_sai_clear_all_irq(SAI_Block_TypeDef *sai_x);
 static uint32_t LL_get_sai_interrupt_flag(SAI_Block_TypeDef *sai, uint32_t protocol,
-					  uint32_t audiomode);
+                                          uint32_t audiomode);
 static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai);
 
 /**
@@ -45,21 +45,21 @@ static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai);
  *
 @verbatim
  ===============================================================================
-	    ##### Initialization and de-initialization functions #####
+      ##### Initialization and de-initialization functions #####
  ===============================================================================
   [..]  This subsection provides a set of functions allowing to initialize and
-	de-initialize the SAIx peripheral:
+  de-initialize the SAIx peripheral:
 
       (+) Call the function sai_init() to configure the selected device with
-	  the selected configuration:
-	(++) Mode (Master/slave TX/RX)
-	(++) Protocol
-	(++) Data Size
-	(++) MCLK Output
-	(++) Audio frequency
-	(++) FIFO Threshold
-	(++) Frame Config
-	(++) Slot Config
+    the selected configuration:
+  (++) Mode (Master/slave TX/RX)
+  (++) Protocol
+  (++) Data Size
+  (++) MCLK Output
+  (++) Audio frequency
+  (++) FIFO Threshold
+  (++) Frame Config
+  (++) Slot Config
 
 @endverbatim
   * @{
@@ -78,53 +78,56 @@ static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai);
  * @retval 0 = success, else failed
  */
 int LL_sai_init_ll_subsystem(SAI_TypeDef *sai, uint32_t protocol, uint32_t datasize,
-			     uint32_t audiomode, uint32_t audiofrequency, uint32_t nbslot,
-			     uint32_t clk_strobs, uint32_t pclk)
+                             uint32_t audiomode, uint32_t audiofrequency, uint32_t nbslot,
+                             uint32_t clk_strobs, uint32_t pclk)
 {
-	int valid = IS_SAI_SUPPORTED_PROTOCOL(protocol) && IS_SAI_PROTOCOL_DATASIZE(datasize) &&
-		    IS_SAI_AUDIO_FREQUENCY(audiofrequency) && IS_SAI_BLOCK_MODE(audiomode) &&
-		    IS_SAI_BLOCK_CLOCK_STROBING(clk_strobs);
+#if DEBUG_ASSERT
+  assert(LL_IS_SAI_ALL_INSTANCE(sai));
+  assert(LL_IS_SAI_SUPPORTED_PROTOCOL(protocol));
+  assert(LL_IS_SAI_PROTOCOL_DATASIZE(datasize));
+  assert(LL_IS_SAI_AUDIO_FREQUENCY(audiofrequency));
+  assert(LL_IS_SAI_BLOCK_MODE(audiomode));
+  assert(LL_IS_SAI_BLOCK_CLOCK_STROBING(clk_strobs));
+  assert(LL_IS_SAI_BLOCK_SLOT_NUMBER(nbslot));
+#endif
+  sai_cfg_t *sai_cfg = &(sai_cfg_t){.Instance = LL_get_sai_block(sai, SAIx_BLOCK_A),
+                                    .init.a_freq = audiofrequency,
+                                    .init.audio_mode = audiomode,
+                                    .init.clk_strobing = clk_strobs,
+                                    .init.sai_clock = pclk,
+                                    .init.b_sync = SAI_ASYNCHRONOUS,
+                                    .init.synchro_ext = SAI_SYNCEXT_DISABLE,
+                                    .init.stereo_mode = SAI_STEREOMODE,
+                                    .init.companding_mode = SAI_NOCOMPANDING,
+                                    .init.output_drv = SAI_OUTPUTDRIVE_DISABLE,
+                                    .init.fifo_threshold = SAI_FIFOSTATUS_EMPTY,
+                                    .init.first_bit = SAI_FIRSTBIT_MSB};
 
-	if (!valid || !sai) {
-		return 1;
-	}
+  int status = 0;
 
-	sai_cfg_t *sai_cfg = &(sai_cfg_t){.Instance = LL_get_sai_block(sai, SAIx_BLOCK_A),
-					  .init.a_freq = audiofrequency,
-					  .init.audio_mode = audiomode,
-					  .init.clk_strobing = clk_strobs,
-					  .init.sai_clock = pclk,
-					  .init.b_sync = SAI_ASYNCHRONOUS,
-					  .init.synchro_ext = SAI_SYNCEXT_DISABLE,
-					  .init.stereo_mode = SAI_STEREOMODE,
-					  .init.companding_mode = SAI_NOCOMPANDING,
-					  .init.output_drv = SAI_OUTPUTDRIVE_DISABLE,
-					  .init.fifo_threshold = SAI_FIFOSTATUS_EMPTY,
-					  .init.first_bit = SAI_FIRSTBIT_MSB};
+  switch (protocol)
+  {
+  case SAI_I2S_STANDARD:
+  case SAI_I2S_MSBJUSTIFIED:
+  case SAI_I2S_LSBJUSTIFIED:
+    status = LL_sai_init_i2s(sai_cfg, protocol, datasize, nbslot);
+    break;
+  case SAI_PCM_LONG:
+  case SAI_PCM_SHORT:
+    status = LL_sai_init_pcm(sai_cfg, protocol, datasize, nbslot);
+    break;
+  default:
+    status = 1;
+    break;
+  }
 
-	int status = 0;
+  if (status == 0)
+  {
+    LL_sai_disable_ll_subsystem(sai);
+    status = LL_sai_init(sai_cfg);
+  }
 
-	switch (protocol) {
-	case SAI_I2S_STANDARD:
-	case SAI_I2S_MSBJUSTIFIED:
-	case SAI_I2S_LSBJUSTIFIED:
-		status = LL_sai_init_i2s(sai_cfg, protocol, datasize, nbslot);
-		break;
-	case SAI_PCM_LONG:
-	case SAI_PCM_SHORT:
-		status = LL_sai_init_pcm(sai_cfg, protocol, datasize, nbslot);
-		break;
-	default:
-		status = 1;
-		break;
-	}
-
-	if (status == 0) {
-		LL_sai_disable_ll_subsystem(sai);
-		status = LL_sai_init(sai_cfg);
-	}
-
-	return status;
+  return status;
 }
 
 /**
@@ -136,130 +139,142 @@ int LL_sai_init_ll_subsystem(SAI_TypeDef *sai, uint32_t protocol, uint32_t datas
  */
 int LL_sai_init(sai_cfg_t *sai_cfg)
 {
-	uint32_t tmpregisterGCR = 0;
-	uint32_t ckstr_bits = 0;
-	uint32_t syncen_bits = 0;
+  uint32_t tmpregisterGCR = 0;
+  uint32_t ckstr_bits = 0;
+  uint32_t syncen_bits = 0;
 
-	/* Check the SAI handle allocation */
-	if (!sai_cfg) {
-		return 1;
-	}
+  /* Check the SAI handle allocation */
+  if (!sai_cfg)
+  {
+    return 1;
+  }
 
-	/* SAI Block Synchro Configuration -----------------------------------------*/
-	/* This setting must be done with both audio block (A & B) disabled         */
-	switch (sai_cfg->init.synchro_ext) {
-	case SAI_SYNCEXT_DISABLE:
-		tmpregisterGCR = 0;
-		break;
-	case SAI_SYNCEXT_OUTBLOCKA_ENABLE:
-		tmpregisterGCR = SAI_GCR_SYNCOUT_0;
-		break;
-	case SAI_SYNCEXT_OUTBLOCKB_ENABLE:
-		tmpregisterGCR = SAI_GCR_SYNCOUT_1;
-		break;
-	default:
-		break;
-	}
+  /* SAI Block Synchro Configuration -----------------------------------------*/
+  /* This setting must be done with both audio block (A & B) disabled         */
+  switch (sai_cfg->init.synchro_ext)
+  {
+  case SAI_SYNCEXT_DISABLE:
+    tmpregisterGCR = 0;
+    break;
+  case SAI_SYNCEXT_OUTBLOCKA_ENABLE:
+    tmpregisterGCR = SAI_GCR_SYNCOUT_0;
+    break;
+  case SAI_SYNCEXT_OUTBLOCKB_ENABLE:
+    tmpregisterGCR = SAI_GCR_SYNCOUT_1;
+    break;
+  default:
+    break;
+  }
 
-	switch (sai_cfg->init.b_sync) {
-	case SAI_ASYNCHRONOUS:
-		syncen_bits = 0;
-		break;
-	case SAI_SYNCHRONOUS:
-		syncen_bits = SAI_xCR1_SYNCEN_0;
-		break;
-	case SAI_SYNCHRONOUS_EXT_SAI1:
-		syncen_bits = SAI_xCR1_SYNCEN_1;
-		break;
-	case SAI_SYNCHRONOUS_EXT_SAI2:
-		syncen_bits = SAI_xCR1_SYNCEN_1;
-		tmpregisterGCR |= SAI_GCR_SYNCIN_0;
-		break;
+  switch (sai_cfg->init.b_sync)
+  {
+  case SAI_ASYNCHRONOUS:
+    syncen_bits = 0;
+    break;
+  case SAI_SYNCHRONOUS:
+    syncen_bits = SAI_xCR1_SYNCEN_0;
+    break;
+  case SAI_SYNCHRONOUS_EXT_SAI1:
+    syncen_bits = SAI_xCR1_SYNCEN_1;
+    break;
+  case SAI_SYNCHRONOUS_EXT_SAI2:
+    syncen_bits = SAI_xCR1_SYNCEN_1;
+    tmpregisterGCR |= SAI_GCR_SYNCIN_0;
+    break;
 
-	default:
-		break;
-	}
+  default:
+    break;
+  }
 
-	if ((sai_cfg->Instance == SAI1_Block_A) || (sai_cfg->Instance == SAI1_Block_B)) {
-		SAI1->GCR = tmpregisterGCR;
-	} else {
+  if ((sai_cfg->Instance == SAI1_Block_A) || (sai_cfg->Instance == SAI1_Block_B))
+  {
+    SAI1->GCR = tmpregisterGCR;
+  }
+  else
+  {
 
-		SAI2->GCR = tmpregisterGCR;
-	}
+    SAI2->GCR = tmpregisterGCR;
+  }
 
-	if (sai_cfg->init.a_freq != SAI_AUDIO_FREQUENCY_MCKDIV) {
-		uint32_t freq = sai_cfg->init.sai_clock;
-		uint32_t tmpval;
+  if (sai_cfg->init.a_freq != SAI_AUDIO_FREQUENCY_MCKDIV)
+  {
+    uint32_t freq = sai_cfg->init.sai_clock;
+    uint32_t tmpval;
 
-		/* Configure Master Clock using the following formula :
-		   MCLK_x = SAI_CK_x / (MCKDIV[3:0] * 2) with MCLK_x = 256 * FS
-		   FS = SAI_CK_x / (MCKDIV[3:0] * 2) * 256
-		   MCKDIV[3:0] = SAI_CK_x / FS * 512 */
-		/* (freq x 10) to keep Significant digits */
-		tmpval = (freq * 10) / (sai_cfg->init.a_freq * 2 * 256);
-		sai_cfg->init.mclk_div = tmpval / 10;
+    /* Configure Master Clock using the following formula :
+       MCLK_x = SAI_CK_x / (MCKDIV[3:0] * 2) with MCLK_x = 256 * FS
+       FS = SAI_CK_x / (MCKDIV[3:0] * 2) * 256
+       MCKDIV[3:0] = SAI_CK_x / FS * 512 */
+    /* (freq x 10) to keep Significant digits */
+    tmpval = (freq * 10) / (sai_cfg->init.a_freq * 2 * 256);
+    sai_cfg->init.mclk_div = tmpval / 10;
 
-		/* Round result to the nearest integer */
-		if ((tmpval % 10) > 8) {
-			sai_cfg->init.mclk_div += 1;
-		}
+    /* Round result to the nearest integer */
+    if ((tmpval % 10) > 8)
+    {
+      sai_cfg->init.mclk_div += 1;
+    }
 
-		/* For SPDIF protocol, SAI shall provide a bit clock twice faster the symbol-rate */
-		if (sai_cfg->init.protocol == SAI_SPDIF_PROTOCOL) {
-			sai_cfg->init.mclk_div = sai_cfg->init.mclk_div >> 1;
-		}
-	}
+    /* For SPDIF protocol, SAI shall provide a bit clock twice faster the symbol-rate */
+    if (sai_cfg->init.protocol == SAI_SPDIF_PROTOCOL)
+    {
+      sai_cfg->init.mclk_div = sai_cfg->init.mclk_div >> 1;
+    }
+  }
 
-	/* Compute CKSTR bits of SAI CR1 according ClockStrobing and AudioMode */
-	if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
-	    (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX)) {
-		/* Transmit */
-		ckstr_bits = (sai_cfg->init.clk_strobing == SAI_CLOCKSTROBING_RISINGEDGE)
-				     ? 0
-				     : SAI_xCR1_CKSTR;
-	} else {
-		/* Receive */
-		ckstr_bits = (sai_cfg->init.clk_strobing == SAI_CLOCKSTROBING_RISINGEDGE)
-				     ? SAI_xCR1_CKSTR
-				     : 0;
-	}
+  /* Compute CKSTR bits of SAI CR1 according ClockStrobing and AudioMode */
+  if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
+      (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX))
+  {
+    /* Transmit */
+    ckstr_bits = (sai_cfg->init.clk_strobing == SAI_CLOCKSTROBING_RISINGEDGE)
+                     ? 0
+                     : SAI_xCR1_CKSTR;
+  }
+  else
+  {
+    /* Receive */
+    ckstr_bits = (sai_cfg->init.clk_strobing == SAI_CLOCKSTROBING_RISINGEDGE)
+                     ? SAI_xCR1_CKSTR
+                     : 0;
+  }
 
-	/* SAI Block Configuration -------------------------------------------------*/
-	/* SAI CR1 Configuration */
-	sai_cfg->Instance->CR1 &=
-		~(SAI_xCR1_MODE | SAI_xCR1_PRTCFG | SAI_xCR1_DS | SAI_xCR1_LSBFIRST |
-		  SAI_xCR1_CKSTR | SAI_xCR1_SYNCEN | SAI_xCR1_MONO | SAI_xCR1_OUTDRIV |
-		  SAI_xCR1_DMAEN | SAI_xCR1_NODIV | SAI_xCR1_MCKDIV);
+  /* SAI Block Configuration -------------------------------------------------*/
+  /* SAI CR1 Configuration */
+  sai_cfg->Instance->CR1 &=
+      ~(SAI_xCR1_MODE | SAI_xCR1_PRTCFG | SAI_xCR1_DS | SAI_xCR1_LSBFIRST |
+        SAI_xCR1_CKSTR | SAI_xCR1_SYNCEN | SAI_xCR1_MONO | SAI_xCR1_OUTDRIV |
+        SAI_xCR1_DMAEN | SAI_xCR1_NODIV | SAI_xCR1_MCKDIV);
 
-	sai_cfg->Instance->CR1 |=
-		(sai_cfg->init.audio_mode | sai_cfg->init.protocol | sai_cfg->init.data_size |
-		 sai_cfg->init.first_bit | ckstr_bits | syncen_bits | sai_cfg->init.stereo_mode |
-		 sai_cfg->init.output_drv | sai_cfg->init.no_divider |
-		 (sai_cfg->init.mclk_div << 20));
+  sai_cfg->Instance->CR1 |=
+      (sai_cfg->init.audio_mode | sai_cfg->init.protocol | sai_cfg->init.data_size |
+       sai_cfg->init.first_bit | ckstr_bits | syncen_bits | sai_cfg->init.stereo_mode |
+       sai_cfg->init.output_drv | sai_cfg->init.no_divider |
+       (sai_cfg->init.mclk_div << 20));
 
-	/* SAI CR2 Configuration */
-	sai_cfg->Instance->CR2 &= ~(SAI_xCR2_FTH | SAI_xCR2_FFLUSH | SAI_xCR2_COMP | SAI_xCR2_CPL);
-	sai_cfg->Instance->CR2 |= (sai_cfg->init.fifo_threshold | sai_cfg->init.companding_mode |
-				   sai_cfg->init.tri_state);
+  /* SAI CR2 Configuration */
+  sai_cfg->Instance->CR2 &= ~(SAI_xCR2_FTH | SAI_xCR2_FFLUSH | SAI_xCR2_COMP | SAI_xCR2_CPL);
+  sai_cfg->Instance->CR2 |= (sai_cfg->init.fifo_threshold | sai_cfg->init.companding_mode |
+                             sai_cfg->init.tri_state);
 
-	/* SAI Frame Configuration -----------------------------------------*/
-	sai_cfg->Instance->FRCR &= (~(SAI_xFRCR_FRL | SAI_xFRCR_FSALL | SAI_xFRCR_FSDEF |
-				      SAI_xFRCR_FSPOL | SAI_xFRCR_FSOFF));
-	sai_cfg->Instance->FRCR |=
-		((sai_cfg->frame_init.frame_length - 1) | sai_cfg->frame_init.fs_offset |
-		 sai_cfg->frame_init.fs_definition | sai_cfg->frame_init.fs_polarity |
-		 ((sai_cfg->frame_init.active_frame_length - 1) << 8));
+  /* SAI Frame Configuration -----------------------------------------*/
+  sai_cfg->Instance->FRCR &= (~(SAI_xFRCR_FRL | SAI_xFRCR_FSALL | SAI_xFRCR_FSDEF |
+                                SAI_xFRCR_FSPOL | SAI_xFRCR_FSOFF));
+  sai_cfg->Instance->FRCR |=
+      ((sai_cfg->frame_init.frame_length - 1) | sai_cfg->frame_init.fs_offset |
+       sai_cfg->frame_init.fs_definition | sai_cfg->frame_init.fs_polarity |
+       ((sai_cfg->frame_init.active_frame_length - 1) << 8));
 
-	/* SAI Block_x SLOT Configuration ------------------------------------------*/
-	/* This register has no meaning in AC 97 and SPDIF audio protocol */
-	sai_cfg->Instance->SLOTR &=
-		(~(SAI_xSLOTR_FBOFF | SAI_xSLOTR_SLOTSZ | SAI_xSLOTR_NBSLOT | SAI_xSLOTR_SLOTEN));
+  /* SAI Block_x SLOT Configuration ------------------------------------------*/
+  /* This register has no meaning in AC 97 and SPDIF audio protocol */
+  sai_cfg->Instance->SLOTR &=
+      (~(SAI_xSLOTR_FBOFF | SAI_xSLOTR_SLOTSZ | SAI_xSLOTR_NBSLOT | SAI_xSLOTR_SLOTEN));
 
-	sai_cfg->Instance->SLOTR |=
-		sai_cfg->slot_init.first_bit_offset | sai_cfg->slot_init.slot_size |
-		(sai_cfg->slot_init.slot_active << 16) | ((sai_cfg->slot_init.n_slot - 1) << 8);
+  sai_cfg->Instance->SLOTR |=
+      sai_cfg->slot_init.first_bit_offset | sai_cfg->slot_init.slot_size |
+      (sai_cfg->slot_init.slot_active << 16) | ((sai_cfg->slot_init.n_slot - 1) << 8);
 
-	return 0;
+  return 0;
 }
 
 /**
@@ -270,22 +285,23 @@ int LL_sai_init(sai_cfg_t *sai_cfg)
  */
 int LL_sai_deinit_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	/* Check the SAI handle allocation */
-	if (!sai) {
-		return 1;
-	}
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  /* Check the SAI handle allocation */
+  if (!sai)
+  {
+    return 1;
+  }
 
-	/* Disabled All interrupt and clear all the flag */
-	LL_sai_clear_all_irq(sai);
+  /* Disabled All interrupt and clear all the flag */
+  LL_sai_clear_all_irq(sai);
 
-	/* Disable the SAI */
-	int status = LL_sai_disable_ll_subsystem(sai_x);
+  /* Disable the SAI */
+  int status = LL_sai_disable_ll_subsystem(sai_x);
 
-	/* Flush the fifo */
-	LL_sai_flush_fifo(sai);
+  /* Flush the fifo */
+  LL_sai_flush_fifo(sai);
 
-	return status;
+  return status;
 }
 /**
  * @}
@@ -296,7 +312,7 @@ int LL_sai_deinit_ll_subsystem(SAI_TypeDef *sai_x)
   *
 @verbatim
   ==============================================================================
-		      ##### IO operation functions #####
+          ##### IO operation functions #####
   ==============================================================================
   [..]
     This subsection provides a set of functions allowing to manage the SAI data
@@ -304,13 +320,13 @@ int LL_sai_deinit_ll_subsystem(SAI_TypeDef *sai_x)
 
     (+) There are two modes of transfer:
       (++) Blocking mode : The communication is performed in the polling mode.
-	   The status of all data processing is returned by the same function
-	   after finishing transfer.
+     The status of all data processing is returned by the same function
+     after finishing transfer.
       (++) No-Blocking mode : The communication is performed using Interrupts
-	   or DMA. These functions return the status of the transfer startup.
-	   The end of the data processing will be indicated through the
-	   dedicated SAI IRQ when using Interrupt mode or the DMA IRQ when
-	   using DMA mode.
+     or DMA. These functions return the status of the transfer startup.
+     The end of the data processing will be indicated through the
+     dedicated SAI IRQ when using Interrupt mode or the DMA IRQ when
+     using DMA mode.
 
     (+) Blocking mode functions are :
       (++) HAL_SAI_Transmit()
@@ -328,20 +344,21 @@ int LL_sai_deinit_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_dma_abort_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	int status = 0;
+  int status = 0;
 
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
 
-	/* Check SAI DMA is enabled or not */
-	if ((sai->CR1 & SAI_xCR1_DMAEN) == SAI_xCR1_DMAEN) {
-		/* Disable the SAI DMA request */
-		sai->CR1 &= ~SAI_xCR1_DMAEN;
-	}
+  /* Check SAI DMA is enabled or not */
+  if ((sai->CR1 & SAI_xCR1_DMAEN) == SAI_xCR1_DMAEN)
+  {
+    /* Disable the SAI DMA request */
+    sai->CR1 &= ~SAI_xCR1_DMAEN;
+  }
 
-	/* Flush the fifo */
-	LL_sai_flush_fifo(sai);
+  /* Flush the fifo */
+  LL_sai_flush_fifo(sai);
 
-	return status;
+  return status;
 }
 
 /**
@@ -352,8 +369,8 @@ int LL_sai_dma_abort_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_dma_resume_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	sai->CR1 |= SAI_xCR1_DMAEN;
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  sai->CR1 |= SAI_xCR1_DMAEN;
 }
 
 /**
@@ -363,17 +380,14 @@ void LL_sai_dma_resume_ll_subsystem(SAI_TypeDef *sai_x)
  * @param  val  value sent during the mute @ref SAI_Block_Mute_Value
  * @retval status (0 = success, 1 = failed)
  */
-int LL_sai_enable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai_x, uint16_t val)
+void LL_sai_enable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai_x, uint16_t val)
 {
-	if (!IS_SAI_BLOCK_MUTE_VALUE(val)) {
-		return 1;
-	}
-
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-
-	CLEAR_BIT(sai->CR2, SAI_xCR2_MUTEVAL | SAI_xCR2_MUTE);
-	SET_BIT(sai->CR2, SAI_xCR2_MUTE | val);
-	return 0;
+#if DEBUG_ASSERT
+  assert(LL_IS_SAI_BLOCK_MUTE_VALUE(val));
+#endif
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  LL_CLEAR_BIT(sai->CR2, SAI_xCR2_MUTEVAL | SAI_xCR2_MUTE);
+  LL_SET_BIT(sai->CR2, SAI_xCR2_MUTE | val);
 }
 
 /**
@@ -384,8 +398,8 @@ int LL_sai_enable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai_x, uint16_t val)
  */
 void LL_sai_disable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	CLEAR_BIT(sai->CR2, SAI_xCR2_MUTEVAL | SAI_xCR2_MUTE);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  LL_CLEAR_BIT(sai->CR2, SAI_xCR2_MUTEVAL | SAI_xCR2_MUTE);
 }
 
 /**
@@ -396,9 +410,9 @@ void LL_sai_disable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_xSR_FREQ) == SAI_xSR_FREQ) &&
-		((sai->IMR & SAI_IT_FREQ) == SAI_IT_FREQ));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_xSR_FREQ) == SAI_xSR_FREQ) &&
+          ((sai->IMR & SAI_IT_FREQ) == SAI_IT_FREQ));
 }
 
 /**
@@ -409,8 +423,8 @@ int LL_sai_get_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_OVRUDR);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_OVRUDR);
 }
 
 /**
@@ -421,8 +435,8 @@ void LL_sai_disable_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_MUTEDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_MUTEDET);
 }
 
 /**
@@ -433,8 +447,8 @@ void LL_sai_disable_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_WCKCFG);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_WCKCFG);
 }
 
 /**
@@ -445,8 +459,8 @@ void LL_sai_disable_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_FREQ);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_FREQ);
 }
 
 /**
@@ -457,8 +471,8 @@ void LL_sai_disable_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_CNRDY);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_CNRDY);
 }
 
 /**
@@ -469,8 +483,8 @@ void LL_sai_disable_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_AFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_AFSDET);
 }
 
 /**
@@ -481,8 +495,8 @@ void LL_sai_disable_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_disable_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_DISABLE_IT(sai, SAI_IT_LFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_DISABLE_IT(sai, SAI_IT_LFSDET);
 }
 
 /**
@@ -493,8 +507,8 @@ void LL_sai_disable_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_OVRUDR);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_OVRUDR);
 }
 
 /**
@@ -505,8 +519,8 @@ void LL_sai_enable_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_MUTEDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_MUTEDET);
 }
 
 /**
@@ -517,8 +531,8 @@ void LL_sai_enable_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_WCKCFG);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_WCKCFG);
 }
 
 /**
@@ -529,8 +543,8 @@ void LL_sai_enable_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_FREQ);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_FREQ);
 }
 
 /**
@@ -541,8 +555,8 @@ void LL_sai_enable_FREQ_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_CNRDY);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_CNRDY);
 }
 
 /**
@@ -553,8 +567,8 @@ void LL_sai_enable_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_AFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_AFSDET);
 }
 
 /**
@@ -565,8 +579,8 @@ void LL_sai_enable_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_enable_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_ENABLE_IT(sai, SAI_IT_LFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE_IT(sai, SAI_IT_LFSDET);
 }
 
 /* Get DMA SAI IO Operation */
@@ -578,26 +592,23 @@ void LL_sai_enable_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_dma_status_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return ((sai->CR1 & SAI_xCR1_SAIEN) != RESET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return ((sai->CR1 & SAI_xCR1_SAIEN) != RESET);
 }
 
 /**
  * @brief  Change Tranfer mode.
  * @param  sai pointer to a SAI_TypeDef structure that contains
  *                the configuration information for SAI module.
- * @retval status (0 = success, 1 = failed)
+ * @retval void
  */
-int LL_sai_set_transfer_mode_ll_subsystem(SAI_TypeDef *sai_x, uint32_t mode)
+void LL_sai_set_transfer_mode_ll_subsystem(SAI_TypeDef *sai_x, uint32_t mode)
 {
-	if (!IS_SAI_BLOCK_MODE(mode)) {
-		return 1;
-	}
-
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-
-	SET_BIT(sai->CR1, mode);
-	return 0;
+#ifdef DEBUG_ASSERT
+  assert(LL_IS_SAI_BLOCK_MODE(mode));
+#endif
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  LL_SET_BIT(sai->CR1, mode);
 }
 /**
  * @brief  Get SAI data register.
@@ -607,8 +618,8 @@ int LL_sai_set_transfer_mode_ll_subsystem(SAI_TypeDef *sai_x, uint32_t mode)
  */
 __IO uint32_t *LL_sai_get_register_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return &sai->DR;
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return &sai->DR;
 }
 
 /************** SAI peripheral controls **************************/
@@ -620,22 +631,36 @@ __IO uint32_t *LL_sai_get_register_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_disable_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	uint32_t count = SAI_DEFAULT_TIMEOUT * WAIT_DELAY;
-	int status = 0;
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  uint32_t count = SAI_DEFAULT_TIMEOUT * WAIT_DELAY;
+  int status = 0;
 
-	/* Disable the SAI instance */
-	__SAI_DISABLE(sai);
+  /* Disable the SAI instance */
+  __SAI_DISABLE(sai);
 
-	do {
-		/* Check for the Timeout */
-		if (count-- == 0) {
-			status = 1;
-			break;
-		}
-	} while ((sai->CR1 & SAI_xCR1_SAIEN) != RESET);
+  do
+  {
+    /* Check for the Timeout */
+    if (count-- == 0)
+    {
+      status = 1;
+      break;
+    }
+  } while ((sai->CR1 & SAI_xCR1_SAIEN) != RESET);
 
-	return status;
+  return status;
+}
+
+/**
+ * @brief  Disable the SAI and wait for the disabling.
+ * @param  sai  pointer to a SAI_Block_TypeDef structure that contains
+ *                the configuration information for SAI module.
+ * @retval status (0 = success, 1 = failed)
+ */
+void LL_sai_enable_ll_subsystem(SAI_TypeDef *sai_x)
+{
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_ENABLE(sai);
 }
 
 /*********************** Get Interrupt Event *******************************/
@@ -648,9 +673,9 @@ int LL_sai_disable_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_OVRUDR) == SAI_FLAG_OVRUDR) &&
-		((sai->IMR & SAI_IT_OVRUDR) == SAI_IT_OVRUDR));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_OVRUDR) == SAI_FLAG_OVRUDR) &&
+          ((sai->IMR & SAI_IT_OVRUDR) == SAI_IT_OVRUDR));
 }
 
 /**
@@ -661,9 +686,9 @@ int LL_sai_get_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_AFSDET) == SAI_FLAG_AFSDET) &&
-		((sai->IMR & SAI_IT_AFSDET) == SAI_IT_AFSDET));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_AFSDET) == SAI_FLAG_AFSDET) &&
+          ((sai->IMR & SAI_IT_AFSDET) == SAI_IT_AFSDET));
 }
 
 /**
@@ -674,9 +699,9 @@ int LL_sai_get_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_LFSDET) == SAI_FLAG_LFSDET) &&
-		((sai->IMR & SAI_IT_LFSDET) == SAI_IT_LFSDET));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_LFSDET) == SAI_FLAG_LFSDET) &&
+          ((sai->IMR & SAI_IT_LFSDET) == SAI_IT_LFSDET));
 }
 
 /**
@@ -687,9 +712,9 @@ int LL_sai_get_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_CNRDY) == SAI_FLAG_CNRDY) &&
-		((sai->IMR & SAI_IT_CNRDY) == SAI_IT_CNRDY));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_CNRDY) == SAI_FLAG_CNRDY) &&
+          ((sai->IMR & SAI_IT_CNRDY) == SAI_IT_CNRDY));
 }
 
 /**
@@ -700,9 +725,9 @@ int LL_sai_get_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_WCKCFG) == SAI_FLAG_WCKCFG) &&
-		((sai->IMR & SAI_IT_WCKCFG) == SAI_IT_WCKCFG));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_WCKCFG) == SAI_FLAG_WCKCFG) &&
+          ((sai->IMR & SAI_IT_WCKCFG) == SAI_IT_WCKCFG));
 }
 
 /**
@@ -713,9 +738,9 @@ int LL_sai_get_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
  */
 int LL_sai_get_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	return (((sai->DR & SAI_FLAG_MUTEDET) == SAI_FLAG_MUTEDET) &&
-		((sai->IMR & SAI_IT_MUTEDET) == SAI_IT_MUTEDET));
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return (((sai->DR & SAI_FLAG_MUTEDET) == SAI_FLAG_MUTEDET) &&
+          ((sai->IMR & SAI_IT_MUTEDET) == SAI_IT_MUTEDET));
 }
 
 /* Clear Interrupt Event */
@@ -727,8 +752,8 @@ int LL_sai_get_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_OVRUDR);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_OVRUDR);
 }
 
 /**
@@ -739,8 +764,8 @@ void LL_sai_clear_OVRUDR_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_AFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_AFSDET);
 }
 
 /**
@@ -751,8 +776,8 @@ void LL_sai_clear_AFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_LFSDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_LFSDET);
 }
 
 /**
@@ -763,8 +788,8 @@ void LL_sai_clear_LFSDET_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_CNRDY);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_CNRDY);
 }
 
 /**
@@ -775,8 +800,8 @@ void LL_sai_clear_CNRDY_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_WCKCFG);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_WCKCFG);
 }
 
 /**
@@ -787,8 +812,8 @@ void LL_sai_clear_WCKCFG_ll_subsystem(SAI_TypeDef *sai_x)
  */
 void LL_sai_clear_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
-	SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-	__SAI_CLEAR_FLAG(sai, SAI_FLAG_MUTEDET);
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  __SAI_CLEAR_FLAG(sai, SAI_FLAG_MUTEDET);
 }
 
 /**
@@ -820,75 +845,86 @@ void LL_sai_clear_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
  * @retval status
  */
 static int LL_sai_init_i2s(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datasize,
-			   uint32_t nbslot)
+                           uint32_t nbslot)
 {
-	sai_cfg->init.protocol = SAI_FREE_PROTOCOL;
-	sai_cfg->init.first_bit = SAI_FIRSTBIT_MSB;
-	/* Compute ClockStrobing according AudioMode */
-	if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
-	    (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX)) {
-		/* Transmit */
-		sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_FALLINGEDGE;
-	} else {
-		/* Receive */
-		sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_RISINGEDGE;
-	}
-	sai_cfg->frame_init.fs_definition = SAI_FS_CHANNEL_IDENTIFICATION;
-	sai_cfg->slot_init.slot_active = SAI_SLOTACTIVE_ALL;
-	sai_cfg->slot_init.first_bit_offset = 0;
-	sai_cfg->slot_init.n_slot = nbslot;
+  sai_cfg->init.protocol = SAI_FREE_PROTOCOL;
+  sai_cfg->init.first_bit = SAI_FIRSTBIT_MSB;
+  /* Compute ClockStrobing according AudioMode */
+  if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
+      (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX))
+  {
+    /* Transmit */
+    sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_FALLINGEDGE;
+  }
+  else
+  {
+    /* Receive */
+    sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_RISINGEDGE;
+  }
+  sai_cfg->frame_init.fs_definition = SAI_FS_CHANNEL_IDENTIFICATION;
+  sai_cfg->slot_init.slot_active = SAI_SLOTACTIVE_ALL;
+  sai_cfg->slot_init.first_bit_offset = 0;
+  sai_cfg->slot_init.n_slot = nbslot;
 
-	/* in IS2 the number of slot must be even */
-	if ((nbslot & 0x1) != 0) {
-		return 1;
-	}
-	if (protocol == SAI_I2S_STANDARD) {
-		sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_LOW;
-		sai_cfg->frame_init.fs_offset = SAI_FS_BEFOREFIRSTBIT;
-	} else {
-		/* SAI_I2S_MSBJUSTIFIED or SAI_I2S_LSBJUSTIFIED */
-		sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_HIGH;
-		sai_cfg->frame_init.fs_offset = SAI_FS_FIRSTBIT;
-	}
+  /* in IS2 the number of slot must be even */
+  if ((nbslot & 0x1) != 0)
+  {
+    return 1;
+  }
+  if (protocol == SAI_I2S_STANDARD)
+  {
+    sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_LOW;
+    sai_cfg->frame_init.fs_offset = SAI_FS_BEFOREFIRSTBIT;
+  }
+  else
+  {
+    /* SAI_I2S_MSBJUSTIFIED or SAI_I2S_LSBJUSTIFIED */
+    sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_HIGH;
+    sai_cfg->frame_init.fs_offset = SAI_FS_FIRSTBIT;
+  }
 
-	/* Frame definition */
-	switch (datasize) {
-	case SAI_PROTOCOL_DATASIZE_16BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_16;
-		sai_cfg->frame_init.frame_length = 32 * (nbslot / 2);
-		sai_cfg->frame_init.active_frame_length = 16 * (nbslot / 2);
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_16B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_16BITEXTENDED:
-		sai_cfg->init.data_size = SAI_DATASIZE_16;
-		sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
-		sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_24BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_24;
-		sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
-		sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_32BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_32;
-		sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
-		sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	default:
-		return 1;
-	}
-	if (protocol == SAI_I2S_LSBJUSTIFIED) {
-		if (datasize == SAI_PROTOCOL_DATASIZE_16BITEXTENDED) {
-			sai_cfg->slot_init.first_bit_offset = 16;
-		}
-		if (datasize == SAI_PROTOCOL_DATASIZE_24BIT) {
-			sai_cfg->slot_init.first_bit_offset = 8;
-		}
-	}
-	return 0;
+  /* Frame definition */
+  switch (datasize)
+  {
+  case SAI_PROTOCOL_DATASIZE_16BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_16;
+    sai_cfg->frame_init.frame_length = 32 * (nbslot / 2);
+    sai_cfg->frame_init.active_frame_length = 16 * (nbslot / 2);
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_16B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_16BITEXTENDED:
+    sai_cfg->init.data_size = SAI_DATASIZE_16;
+    sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
+    sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_24BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_24;
+    sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
+    sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_32BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_32;
+    sai_cfg->frame_init.frame_length = 64 * (nbslot / 2);
+    sai_cfg->frame_init.active_frame_length = 32 * (nbslot / 2);
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  default:
+    return 1;
+  }
+  if (protocol == SAI_I2S_LSBJUSTIFIED)
+  {
+    if (datasize == SAI_PROTOCOL_DATASIZE_16BITEXTENDED)
+    {
+      sai_cfg->slot_init.first_bit_offset = 16;
+    }
+    if (datasize == SAI_PROTOCOL_DATASIZE_24BIT)
+    {
+      sai_cfg->slot_init.first_bit_offset = 8;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -902,59 +938,66 @@ static int LL_sai_init_i2s(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datas
  * @retval status
  */
 static int LL_sai_init_pcm(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datasize,
-			   uint32_t nbslot)
+                           uint32_t nbslot)
 {
-	sai_cfg->init.protocol = SAI_FREE_PROTOCOL;
-	sai_cfg->init.first_bit = SAI_FIRSTBIT_MSB;
-	/* Compute ClockStrobing according AudioMode */
-	if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
-	    (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX)) {
-		/* Transmit */
-		sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_RISINGEDGE;
-	} else {
-		/* Receive */
-		sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_FALLINGEDGE;
-	}
-	sai_cfg->frame_init.fs_definition = SAI_FS_STARTFRAME;
-	sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_HIGH;
-	sai_cfg->frame_init.fs_offset = SAI_FS_BEFOREFIRSTBIT;
-	sai_cfg->slot_init.first_bit_offset = 0;
-	sai_cfg->slot_init.n_slot = nbslot;
-	sai_cfg->slot_init.slot_active = SAI_SLOTACTIVE_ALL;
+  sai_cfg->init.protocol = SAI_FREE_PROTOCOL;
+  sai_cfg->init.first_bit = SAI_FIRSTBIT_MSB;
+  /* Compute ClockStrobing according AudioMode */
+  if ((sai_cfg->init.audio_mode == SAI_MODEMASTER_TX) ||
+      (sai_cfg->init.audio_mode == SAI_MODESLAVE_TX))
+  {
+    /* Transmit */
+    sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_RISINGEDGE;
+  }
+  else
+  {
+    /* Receive */
+    sai_cfg->init.clk_strobing = SAI_CLOCKSTROBING_FALLINGEDGE;
+  }
+  sai_cfg->frame_init.fs_definition = SAI_FS_STARTFRAME;
+  sai_cfg->frame_init.fs_polarity = SAI_FS_ACTIVE_HIGH;
+  sai_cfg->frame_init.fs_offset = SAI_FS_BEFOREFIRSTBIT;
+  sai_cfg->slot_init.first_bit_offset = 0;
+  sai_cfg->slot_init.n_slot = nbslot;
+  sai_cfg->slot_init.slot_active = SAI_SLOTACTIVE_ALL;
 
-	if (protocol == SAI_PCM_SHORT) {
-		sai_cfg->frame_init.active_frame_length = 1;
-	} else {
-		/* SAI_PCM_LONG */
-		sai_cfg->frame_init.active_frame_length = 13;
-	}
+  if (protocol == SAI_PCM_SHORT)
+  {
+    sai_cfg->frame_init.active_frame_length = 1;
+  }
+  else
+  {
+    /* SAI_PCM_LONG */
+    sai_cfg->frame_init.active_frame_length = 13;
+  }
 
-	switch (datasize) {
-	case SAI_PROTOCOL_DATASIZE_16BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_16;
-		sai_cfg->frame_init.frame_length = 16 * nbslot;
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_16B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_16BITEXTENDED:
-		sai_cfg->init.data_size = SAI_DATASIZE_16;
-		sai_cfg->frame_init.frame_length = 32 * nbslot;
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_24BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_24;
-		sai_cfg->frame_init.frame_length = 32 * nbslot;
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	case SAI_PROTOCOL_DATASIZE_32BIT:
-		sai_cfg->init.data_size = SAI_DATASIZE_32;
-		sai_cfg->frame_init.frame_length = 32 * nbslot;
-		sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
-		break;
-	default:
-		return 1;
-	}
+  switch (datasize)
+  {
+  case SAI_PROTOCOL_DATASIZE_16BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_16;
+    sai_cfg->frame_init.frame_length = 16 * nbslot;
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_16B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_16BITEXTENDED:
+    sai_cfg->init.data_size = SAI_DATASIZE_16;
+    sai_cfg->frame_init.frame_length = 32 * nbslot;
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_24BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_24;
+    sai_cfg->frame_init.frame_length = 32 * nbslot;
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  case SAI_PROTOCOL_DATASIZE_32BIT:
+    sai_cfg->init.data_size = SAI_DATASIZE_32;
+    sai_cfg->frame_init.frame_length = 32 * nbslot;
+    sai_cfg->slot_init.slot_size = SAI_SLOTSIZE_32B;
+    break;
+  default:
+    return 1;
+  }
 
-	return 0;
+  return 0;
 }
 
 /**
@@ -966,8 +1009,8 @@ static int LL_sai_init_pcm(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datas
 
 static void LL_sai_clear_all_irq(SAI_Block_TypeDef *sai)
 {
-	__SAI_CLEAR_FLAG(sai, 0xFFFFFFFFUL);
-	__SAI_DISABLE_IT(sai, 0UL);
+  __SAI_CLEAR_FLAG(sai, 0xFFFFFFFFUL);
+  __SAI_DISABLE_IT(sai, 0UL);
 }
 
 /**
@@ -978,7 +1021,7 @@ static void LL_sai_clear_all_irq(SAI_Block_TypeDef *sai)
  */
 static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai)
 {
-	SET_BIT(sai->CR2, SAI_xCR2_FFLUSH);
+  LL_SET_BIT(sai->CR2, SAI_xCR2_FFLUSH);
 }
 
 /* Retrieve the SAIx Block in use*/
@@ -993,11 +1036,14 @@ static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai)
 
 static SAI_Block_TypeDef *LL_get_sai_block(SAI_TypeDef *SAIx, uint32_t block)
 {
-	if (SAIx == SAI2) {
-		return block == SAIx_BLOCK_A ? SAI2_Block_A : SAI2_Block_B;
-	} else {
-		return block == SAIx_BLOCK_A ? SAI1_Block_A : SAI1_Block_B;
-	}
+  if (SAIx == SAI2)
+  {
+    return block == SAIx_BLOCK_A ? SAI2_Block_A : SAI2_Block_B;
+  }
+  else
+  {
+    return block == SAIx_BLOCK_A ? SAI1_Block_A : SAI1_Block_B;
+  }
 }
 
 /**
@@ -1008,24 +1054,28 @@ static SAI_Block_TypeDef *LL_get_sai_block(SAI_TypeDef *SAIx, uint32_t block)
  * @retval the list of the IT flag to enable
  */
 static uint32_t LL_get_sai_interrupt_flag(SAI_Block_TypeDef *sai, uint32_t protocol,
-					  uint32_t audiomode)
+                                          uint32_t audiomode)
 {
-	uint32_t tmpIT = SAI_IT_OVRUDR;
+  uint32_t tmpIT = SAI_IT_OVRUDR;
 
-	tmpIT |= SAI_IT_FREQ;
+  tmpIT |= SAI_IT_FREQ;
 
-	if ((protocol == SAI_AC97_PROTOCOL) &&
-	    ((audiomode == SAI_MODESLAVE_RX) || (audiomode == SAI_MODEMASTER_RX))) {
-		tmpIT |= SAI_IT_CNRDY;
-	}
+  if ((protocol == SAI_AC97_PROTOCOL) &&
+      ((audiomode == SAI_MODESLAVE_RX) || (audiomode == SAI_MODEMASTER_RX)))
+  {
+    tmpIT |= SAI_IT_CNRDY;
+  }
 
-	if ((audiomode == SAI_MODESLAVE_RX) || (audiomode == SAI_MODESLAVE_TX)) {
-		tmpIT |= SAI_IT_AFSDET | SAI_IT_LFSDET;
-	} else {
-		/* sai has been configured in master mode */
-		tmpIT |= SAI_IT_WCKCFG;
-	}
-	return tmpIT;
+  if ((audiomode == SAI_MODESLAVE_RX) || (audiomode == SAI_MODESLAVE_TX))
+  {
+    tmpIT |= SAI_IT_AFSDET | SAI_IT_LFSDET;
+  }
+  else
+  {
+    /* sai has been configured in master mode */
+    tmpIT |= SAI_IT_WCKCFG;
+  }
+  return tmpIT;
 }
 
 /**
