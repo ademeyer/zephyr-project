@@ -1,0 +1,31 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../zephyrproject"
+		}
+	],
+  "settings": {
+    "files.associations": {
+      "*.dbclient-js": "javascript",
+      "chrono": "c",
+      "variant": "c",
+      "*.inc": "c",
+      "stm32_clock_control.h": "c",
+      "algorithm": "c",
+      "any": "c",
+      "memory": "c",
+      "optional": "c",
+      "random": "c",
+      "bitset": "c",
+      "future": "c",
+      "condition_variable": "c",
+      "shared_multi_heap.h": "c",
+      "clock_control.h": "c",
+      "stm32_ll_rcc.h": "c",
+      "log.h": "c"
+    }
+  }
+}

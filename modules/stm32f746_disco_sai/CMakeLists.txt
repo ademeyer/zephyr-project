@@ -9,4 +9,7 @@ if(CONFIG_SAI_STM32)
   # Add source file to build
   zephyr_library_sources(stm32_ll_sai.c)
   zephyr_library_sources(i2s_sai_ll_stm32.c)
+
+  # Make sure we have the correct clock control dependencies
+  # zephyr_link_libraries_ifdef(CONFIG_CLOCK_CONTROL clock_control)
 endif()

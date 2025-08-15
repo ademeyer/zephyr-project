@@ -35,7 +35,7 @@ extern "C"
    */
   typedef struct
   {
-    uint32_t sai_clock;       /* Clock applied to SAI peripherals */
+    uint32_t clock_div;       /* Clock applied to SAI peripherals */
     uint32_t audio_mode;      /* Specifies the SAI Block audio Mode. */
     uint32_t b_sync;          /* Specifies SAI Block synchronization.*/
     uint32_t synchro_ext;     /* Specifies SAI external output synchronization, this setup is common
@@ -534,7 +534,7 @@ extern "C"
    */
   int LL_sai_init_ll_subsystem(SAI_TypeDef *sai, uint32_t protocol, uint32_t datasize,
                                uint32_t audiomode, uint32_t audiofrequency, uint32_t nbslot,
-                               uint32_t clk_strobs, uint32_t pclk);
+                               uint32_t clk_strobs, uint32_t pclk_div);
   int LL_sai_deinit_ll_subsystem(SAI_TypeDef *sai);
 
   /**
@@ -550,6 +550,7 @@ extern "C"
   void LL_sai_set_transfer_mode_ll_subsystem(SAI_TypeDef *sai_x, uint32_t mode);
   void LL_sai_enable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai, uint16_t val);
   void LL_sai_disable_tx_mute_mode_ll_subsystem(SAI_TypeDef *sai);
+  int LL_sai_FIFO_empty_ll_subsystem(SAI_TypeDef *sai_x);
 
   /* SAI IO Register Functions */
   __IO uint32_t *LL_sai_get_register_ll_subsystem(SAI_TypeDef *sai);
@@ -590,7 +591,7 @@ extern "C"
   int LL_sai_get_AFSDET_ll_subsystem(SAI_TypeDef *sai);
   int LL_sai_get_LFSDET_ll_subsystem(SAI_TypeDef *sai);
 
-  /* Set ISR Event */
+  /* Clear ISR Event */
   void LL_sai_clear_OVRUDR_ll_subsystem(SAI_TypeDef *sai);
   void LL_sai_clear_MUTEDET_ll_subsystem(SAI_TypeDef *sai);
   void LL_sai_clear_WCKCFG_ll_subsystem(SAI_TypeDef *sai);
@@ -598,6 +599,7 @@ extern "C"
   void LL_sai_clear_CNRDY_ll_subsystem(SAI_TypeDef *sai);
   void LL_sai_clear_AFSDET_ll_subsystem(SAI_TypeDef *sai);
   void LL_sai_clear_LFSDET_ll_subsystem(SAI_TypeDef *sai);
+  void LL_sai_clear_all_ISR_ll_subsystem(SAI_TypeDef *sai);
 
   /**
    * @}

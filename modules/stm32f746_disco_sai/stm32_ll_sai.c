@@ -79,7 +79,7 @@ static void LL_sai_flush_fifo(SAI_Block_TypeDef *sai);
  */
 int LL_sai_init_ll_subsystem(SAI_TypeDef *sai, uint32_t protocol, uint32_t datasize,
                              uint32_t audiomode, uint32_t audiofrequency, uint32_t nbslot,
-                             uint32_t clk_strobs, uint32_t pclk)
+                             uint32_t clk_strobs, uint32_t pclk_div)
 {
 #if DEBUG_ASSERT
   assert(LL_IS_SAI_ALL_INSTANCE(sai));
@@ -94,7 +94,7 @@ int LL_sai_init_ll_subsystem(SAI_TypeDef *sai, uint32_t protocol, uint32_t datas
                                     .init.a_freq = audiofrequency,
                                     .init.audio_mode = audiomode,
                                     .init.clk_strobing = clk_strobs,
-                                    .init.sai_clock = pclk,
+                                    .init.clock_div = pclk_div,
                                     .init.b_sync = SAI_ASYNCHRONOUS,
                                     .init.synchro_ext = SAI_SYNCEXT_DISABLE,
                                     .init.stereo_mode = SAI_STEREOMODE,
@@ -198,22 +198,22 @@ int LL_sai_init(sai_cfg_t *sai_cfg)
 
   if (sai_cfg->init.a_freq != SAI_AUDIO_FREQUENCY_MCKDIV)
   {
-    uint32_t freq = sai_cfg->init.sai_clock;
+    /* uint32_t freq = sai_cfg->init.clock_div;
     uint32_t tmpval;
 
-    /* Configure Master Clock using the following formula :
+     Configure Master Clock using the following formula :
        MCLK_x = SAI_CK_x / (MCKDIV[3:0] * 2) with MCLK_x = 256 * FS
        FS = SAI_CK_x / (MCKDIV[3:0] * 2) * 256
        MCKDIV[3:0] = SAI_CK_x / FS * 512 */
-    /* (freq x 10) to keep Significant digits */
-    tmpval = (freq * 10) / (sai_cfg->init.a_freq * 2 * 256);
-    sai_cfg->init.mclk_div = tmpval / 10;
+    /* (freq x 10) to keep Significant digits
+    tmpval = (freq * 10) / (sai_cfg->init.a_freq * 2 * 256);*/
+    sai_cfg->init.mclk_div = sai_cfg->init.clock_div; // tmpval / 10;
 
     /* Round result to the nearest integer */
-    if ((tmpval % 10) > 8)
-    {
-      sai_cfg->init.mclk_div += 1;
-    }
+    // if ((tmpval % 10) > 8)
+    // {
+    //   sai_cfg->init.mclk_div += 1;
+    // }
 
     /* For SPDIF protocol, SAI shall provide a bit clock twice faster the symbol-rate */
     if (sai_cfg->init.protocol == SAI_SPDIF_PROTOCOL)
@@ -355,9 +355,6 @@ int LL_sai_dma_abort_ll_subsystem(SAI_TypeDef *sai_x)
     sai->CR1 &= ~SAI_xCR1_DMAEN;
   }
 
-  /* Flush the fifo */
-  LL_sai_flush_fifo(sai);
-
   return status;
 }
 
@@ -370,6 +367,8 @@ int LL_sai_dma_abort_ll_subsystem(SAI_TypeDef *sai_x)
 void LL_sai_dma_resume_ll_subsystem(SAI_TypeDef *sai_x)
 {
   SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  /* Flush the fifo */
+  // LL_sai_flush_fifo(sai);
   sai->CR1 |= SAI_xCR1_DMAEN;
 }
 
@@ -648,6 +647,9 @@ int LL_sai_disable_ll_subsystem(SAI_TypeDef *sai_x)
     }
   } while ((sai->CR1 & SAI_xCR1_SAIEN) != RESET);
 
+  /* Flush the fifo */
+  LL_sai_flush_fifo(sai);
+
   return status;
 }
 
@@ -655,12 +657,27 @@ int LL_sai_disable_ll_subsystem(SAI_TypeDef *sai_x)
  * @brief  Disable the SAI and wait for the disabling.
  * @param  sai  pointer to a SAI_Block_TypeDef structure that contains
  *                the configuration information for SAI module.
- * @retval status (0 = success, 1 = failed)
+ * @retval void
  */
 void LL_sai_enable_ll_subsystem(SAI_TypeDef *sai_x)
 {
   SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
-  __SAI_ENABLE(sai);
+  if ((sai->CR1 & SAI_xCR1_SAIEN) == 0U)
+  {
+    __SAI_ENABLE(sai);
+  }
+}
+
+/**
+ * @brief  Get FIFO empty status.
+ * @param  sai  pointer to a SAI_Block_TypeDef structure that contains
+ *                the configuration information for SAI module.
+ * @retval status (1 = empty, 0 = not empty)
+ */
+int LL_sai_FIFO_empty_ll_subsystem(SAI_TypeDef *sai_x)
+{
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  return ((sai->SR & SAI_xSR_FLVL) == SAI_FIFOSTATUS_EMPTY);
 }
 
 /*********************** Get Interrupt Event *******************************/
@@ -814,6 +831,18 @@ void LL_sai_clear_MUTEDET_ll_subsystem(SAI_TypeDef *sai_x)
 {
   SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
   __SAI_CLEAR_FLAG(sai, SAI_FLAG_MUTEDET);
+}
+
+/**
+ * @brief  Clear mute frame irq flag.
+ * @param  sai pointer to a SAI_TypeDef structure that contains
+ *                the configuration information for SAI module.
+ * @retval void
+ */
+void LL_sai_clear_all_ISR_ll_subsystem(SAI_TypeDef *sai_x)
+{
+  SAI_Block_TypeDef *sai = LL_get_sai_block(sai_x, SAIx_BLOCK_A);
+  LL_sai_clear_all_irq(sai);
 }
 
 /**
@@ -1009,8 +1038,8 @@ static int LL_sai_init_pcm(sai_cfg_t *sai_cfg, uint32_t protocol, uint32_t datas
 
 static void LL_sai_clear_all_irq(SAI_Block_TypeDef *sai)
 {
-  __SAI_CLEAR_FLAG(sai, 0xFFFFFFFFUL);
   __SAI_DISABLE_IT(sai, 0UL);
+  __SAI_CLEAR_FLAG(sai, 0xFFFFFFFFU);
 }
 
 /**

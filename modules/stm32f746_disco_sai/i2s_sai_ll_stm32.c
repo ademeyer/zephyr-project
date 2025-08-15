@@ -21,7 +21,13 @@
 #include <zephyr/irq.h>
 #include "i2s_sai_ll_stm32.h"
 
-LOG_MODULE_REGISTER(i2s_sai_ll_stm32);
+LOG_MODULE_REGISTER(i2s_sai_ll_stm32, LOG_LEVEL_DBG);
+
+static uint32_t get_sai_clock_div(uint32_t clk, uint32_t a_freq)
+{
+  uint32_t tmpval = (clk * 10) / (a_freq * 2 * 256);
+  return (tmpval % 10) > 8 ? ((tmpval / 10) + 1) : (tmpval / 10); /* round to nearest figure*/
+}
 
 static bool queue_is_empty(struct k_msgq *q)
 {
@@ -88,20 +94,37 @@ static int i2s_stm32_enable_clock(const struct device *dev)
 
   if (cfg->pclk_len > 1)
   {
-    /* Enable I2S clock source */
-    ret = clock_control_configure(clk, (clock_control_subsys_t)&cfg->pclken[1], NULL);
-    if (ret < 0)
-    {
-      LOG_ERR("Could not configure I2S domain clock");
-      return -EIO;
-    }
+    // /* Enable I2S clock source */
+    // ret = clock_control_configure(clk, (clock_control_subsys_t)&cfg->pclken[1], NULL);
+    // if (ret < 0)
+    // {
+    //   LOG_ERR("Could not configure I2S domain clock");
+    //   return -EIO;
+    // }
   }
+/* Enable SAI clock source */
+#if CONFIG_SOC_STM32F746XX
+#define LL_RCC_PLLN 289
+  LL_RCC_PLLSAI_Disable();
+  LL_RCC_PLLSAI_ConfigDomain_SAI(LL_RCC_PLLSOURCE_HSE,     // 25MHz
+                                 LL_RCC_PLLM_DIV_21,       // 25 / 21 = 1.19047619MHz
+                                 LL_RCC_PLLN,              // 1.19047619 * 289 = 344.047619048MHz
+                                 LL_RCC_PLLSAIQ_DIV_7,     // 344.047619048 / 7 = 49.149659864 MHz
+                                 LL_RCC_PLLSAIDIVQ_DIV_2); // 49.149659864 / 2 = 24.575MHz
+
+  LL_RCC_PLLSAI_Enable();
+  while (LL_RCC_PLLSAI_IsReady() != 1)
+    ;
+#endif
 
   return 0;
 }
 
 static int i2s_stm32_get_clock(const struct device *dev, uint32_t *sai_clk_freq)
 {
+#if CONFIG_SOC_STM32F746XX
+  *sai_clk_freq = LL_RCC_GetSAIClockFreq(LL_RCC_SAI2_CLKSOURCE);
+#else
   const struct i2s_sai_stm32_cfg *cfg = dev->config;
 
   if (cfg->pclk_len > 1)
@@ -126,7 +149,7 @@ static int i2s_stm32_get_clock(const struct device *dev, uint32_t *sai_clk_freq)
       return -EIO;
     }
   }
-
+#endif
   return 0;
 }
 
@@ -289,14 +312,23 @@ static int i2s_sai_stm32_configure(const struct device *dev, enum i2s_dir dir,
     return -EINVAL;
   }
 
+  /* Calculate PCLK division */
+  uint32_t pclk_div = get_sai_clock_div(clk, a_frequency);
+  LOG_INF("\nSAI LL subsystem config details:\nPLLSAI clock: %d(Hz)\nprotocol: %d\ndatasize : % d\naudio mode : % d\naudio freq : % d(Hz)\npclk_div : % d\n ",
+          clk, protocol, datasize, a_mode, a_frequency, pclk_div);
+
+  /* Clear All interrupt flag */
+  /* Disable SAI peripherals */
+
   /* Configure SAI subsystem */
   ret = LL_sai_init_ll_subsystem(cfg->i2s, protocol, datasize, a_mode, a_frequency, num_slot,
-                                 clk_strobing, clk);
+                                 clk_strobing, pclk_div);
   if (ret != 0)
   {
     LOG_ERR("SAI LL I2S configuration failed");
     return -ENOSYS;
   }
+  stream->state = I2S_STATE_READY;
   return 0;
 }
 
@@ -337,14 +369,12 @@ static int i2s_sai_stm32_trigger(const struct device *dev, enum i2s_dir dir,
     }
 
     __ASSERT_NO_MSG(stream->mem_block == NULL);
-
     ret = stream->stream_start(stream, dev);
     if (ret < 0)
     {
       LOG_ERR("START trigger failed %d", ret);
       return ret;
     }
-
     stream->state = I2S_STATE_RUNNING;
     stream->last_block = false;
     break;
@@ -717,21 +747,51 @@ tx_disable:
 }
 
 static uint32_t i2s_stm32_irq_count;
-static uint32_t i2s_stm32_irq_ovr_count;
+// static uint32_t i2s_stm32_irq_ovr_count;
 static uint32_t i2s_stm32_irq_udr_count;
 
 static void i2s_stm32_isr(const struct device *dev)
 {
   const struct i2s_sai_stm32_cfg *cfg = dev->config;
 
-  /* NOTE: UDR error must be explicitly cleared on STM32H7 */
+  /* NOTE: UDR error must be explicitly cleared on STM32F7 & STM32H7 */
   if (LL_sai_get_OVRUDR_ll_subsystem(cfg->i2s))
   {
     i2s_stm32_irq_udr_count++;
     LL_sai_clear_OVRUDR_ll_subsystem(cfg->i2s);
+    LOG_WRN("OVRUDR occurred!");
   }
+  else if (LL_sai_get_WCKCFG_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("WCKCFG occurred!");
+  }
+  else if (LL_sai_get_FREQ_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("FIFO occurred!");
+  }
+  else if (LL_sai_get_LFSDET_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("LFSDET occurred!");
+  }
+  else if (LL_sai_get_AFSDET_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("AFSDET occurred!");
+  }
+  else if (LL_sai_get_CNRDY_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("CNRDY occurred!");
+  }
+  else if (LL_sai_get_MUTEDET_ll_subsystem(cfg->i2s))
+  {
+    LOG_WRN("MUTEDET occurred!");
+  }
+  // else
+  // {
+  //   LOG_WRN("unknown occurred!");
+  //   LL_sai_clear_all_ISR_ll_subsystem(cfg->i2s);
+  // }
 
-  i2s_stm32_irq_count++;
+  // i2s_stm32_irq_count++;
 }
 
 static int i2s_stm32_initialize(const struct device *dev)
@@ -796,14 +856,14 @@ static int rx_stream_start(struct stream *stream, const struct device *dev)
     return ret;
   }
 
-  if (stream->master)
-  {
-    LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_RX);
-  }
-  else
-  {
-    LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_RX);
-  }
+  // if (stream->master)
+  // {
+  //   LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_RX);
+  // }
+  // else
+  // {
+  //   LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_RX);
+  // }
 
   /* remember active RX DMA channel (used in callback) */
   active_dma_rx_channel[stream->dma_channel] = dev;
@@ -831,6 +891,7 @@ static int rx_stream_start(struct stream *stream, const struct device *dev)
 
 static int tx_stream_start(struct stream *stream, const struct device *dev)
 {
+  LOG_INF("DMA TX started");
   const struct i2s_sai_stm32_cfg *cfg = dev->config;
   size_t mem_block_size;
   int ret;
@@ -844,18 +905,20 @@ static int tx_stream_start(struct stream *stream, const struct device *dev)
   /* Assure cache coherency before DMA read operation */
   sys_cache_data_flush_range(stream->mem_block, mem_block_size);
 
-  if (stream->master)
-  {
-    LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_TX);
-  }
-  else
-  {
-    LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODESLAVE_TX);
-  }
+  // if (stream->master)
+  // {
+  //   LOG_INF("DMA TX master mode");
+  //   LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODEMASTER_TX);
+  // }
+  // else
+  // {
+  //   LOG_INF("DMA TX slave mode");
+  //   LL_sai_set_transfer_mode_ll_subsystem(cfg->i2s, SAI_MODESLAVE_TX);
+  // }
 
   /* remember active TX DMA channel (used in callback) */
   active_dma_tx_channel[stream->dma_channel] = dev;
-
+  LOG_INF("starting DMA");
   ret = start_dma(stream->dev_dma, stream->dma_channel, &stream->dma_cfg, stream->mem_block,
                   stream->src_addr_increment,
                   (void *)LL_sai_get_register_ll_subsystem(cfg->i2s),
@@ -867,12 +930,29 @@ static int tx_stream_start(struct stream *stream, const struct device *dev)
     return ret;
   }
 
-  /* Enable SAI DMA */
-  LL_sai_dma_resume_ll_subsystem(cfg->i2s);
-
-  /* Enable SAI ISR Event */
+  /* Enable interrupt error handling */
+  LL_sai_enable_WCKCFG_ll_subsystem(cfg->i2s);
+  // LL_sai_enable_FREQ_ll_subsystem(cfg->i2s);
   LL_sai_enable_OVRUDR_ll_subsystem(cfg->i2s);
-  LL_sai_enable_FREQ_ll_subsystem(cfg->i2s);
+  LOG_INF("starting DMA HERE 1");
+
+  /* Enable SAI Tx DMA request */
+  LL_sai_dma_resume_ll_subsystem(cfg->i2s);
+  LOG_INF("starting DMA HERE 2");
+
+  /* Wait Until FIFO is not empty */
+  uint32_t timeout = 1000000UL;
+  while (LL_sai_FIFO_empty_ll_subsystem(cfg->i2s))
+  {
+    if (--timeout == 0)
+    {
+      LOG_ERR("timeout waiting for FIFO non empty");
+      return -EIO;
+    }
+  }
+  LOG_INF("starting DMA HERE 3");
+
+  /* Enable SAI peripherals */
   LL_sai_enable_ll_subsystem(cfg->i2s);
 
   return 0;
@@ -884,9 +964,15 @@ static void rx_stream_disable(struct stream *stream, const struct device *dev)
 
   /* Disable SAI DMR RX */
   LL_sai_dma_abort_ll_subsystem(cfg->i2s);
-  /* Disable SAI ISR Event */
-  LL_sai_disable_OVRUDR_ll_subsystem(cfg->i2s);
-  LL_sai_disable_FREQ_ll_subsystem(cfg->i2s);
+
+  if (!LL_sai_get_WCKCFG_ll_subsystem(cfg->i2s))
+  {
+    /* Disable SAI peripheral */
+    LL_sai_disable_ll_subsystem(cfg->i2s);
+  }
+
+  /* Disable all interrupts and clear all flags */
+  LL_sai_clear_all_ISR_ll_subsystem(cfg->i2s);
 
   dma_stop(stream->dev_dma, stream->dma_channel);
   if (stream->mem_block != NULL)
@@ -894,8 +980,6 @@ static void rx_stream_disable(struct stream *stream, const struct device *dev)
     k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
     stream->mem_block = NULL;
   }
-
-  LL_sai_disable_ll_subsystem(cfg->i2s);
 
   active_dma_rx_channel[stream->dma_channel] = NULL;
 }
@@ -906,9 +990,6 @@ static void tx_stream_disable(struct stream *stream, const struct device *dev)
 
   /* Disable SAI DMR TX */
   LL_sai_dma_abort_ll_subsystem(cfg->i2s);
-  /* Disable SAI ISR Event */
-  LL_sai_disable_OVRUDR_ll_subsystem(cfg->i2s);
-  LL_sai_disable_FREQ_ll_subsystem(cfg->i2s);
 
   dma_stop(stream->dev_dma, stream->dma_channel);
   if (stream->mem_block != NULL)
@@ -919,7 +1000,14 @@ static void tx_stream_disable(struct stream *stream, const struct device *dev)
 
   /* Wait for TX queue to drain before disabling */
   k_busy_wait(100);
-  LL_sai_disable_ll_subsystem(cfg->i2s);
+  if (!LL_sai_get_WCKCFG_ll_subsystem(cfg->i2s))
+  {
+    /* Disable SAI peripheral */
+    LL_sai_disable_ll_subsystem(cfg->i2s);
+  }
+
+  /* Disable all interrupts and clear all flags */
+  LL_sai_clear_all_ISR_ll_subsystem(cfg->i2s);
 
   active_dma_tx_channel[stream->dma_channel] = NULL;
 }
