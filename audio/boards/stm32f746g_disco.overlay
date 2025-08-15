@@ -1,12 +1,18 @@
 /{
 
+  lvgl_pointer {
+    /delete-property/ input; /* It is posible the PLLSAI clock may not be suitable for LCD-TFT */
+    };
+  chosen {
+    /delete-property/ zephyr,display ;
+    /delete-property/ zephyr,touch;  /* It is posible the PLLSAI clock may not be suitable for LCD-TFT */
+    };
   sai2: sai@40015C00 {
       compatible = "st,stm32-sai";
       #address-cells = <1>;
       #size-cells = <0>;
       reg = <0x40015C00 0x400>;
-      clocks = <&rcc STM32_CLOCK(APB2, 28U)>;
-      clock-names = "mclk";
+      clocks = <&rcc STM32_CLOCK(APB2, 23U)>;
       interrupts = <91 0>;
       interrupt-parent = <&nvic>;
       dmas = <&dma2 1 4 STM32_DMA_MEM_INC STM32_DMA_FIFO_FULL
@@ -21,7 +27,7 @@
                   >;
       pinctrl-names = "default";
       status = "okay";
-  };
+  }; 
 
   aliases {
 		i2s-codec-tx = &sai2;
@@ -29,14 +35,31 @@
 
 };
 
+&pll {
+	div-m = <21>;
+	mul-n = <336>;
+	div-p = <2>;
+};
+
+&rcc {
+  clock-frequency = <DT_FREQ_M(200)>;
+};
+
 &dma2 {
   status = "okay";
 };
 
+&ltdc {
+  status = "disabled";
+};
+
 &i2c3 {
-    audio_codec: wm8962@34 {
+    /delete-node/ ft5336@38; /* It is posible the PLLSAI clock may not be suitable for LCD-TFT */
+    audio_codec: wm8962@1a {
       compatible = "wolfson,wm8962";
-      reg = <0x34>;
+      reg = <0x1A>;
       clock-source = "MCLK";
+      clocks = <&rcc STM32_CLOCK(APB2, 23U)>;
+      clock-names = "mclk";
     };
 };
